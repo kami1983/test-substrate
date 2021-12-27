@@ -36,6 +36,14 @@ pub fn lowest_common_ancestor<Block: BlockT, T: HeaderMetadata<Block> + ?Sized>(
 	id_one: Block::Hash,
 	id_two: Block::Hash,
 ) -> Result<HashAndNumber<Block>, T::Error> {
+
+	log::info!("{} 用来获取两个树 one = {:?} 和 two = {:?} 的共同优先祖先的方法",
+			   ansi_term::Colour::Red.bold().paint("###### primitives/blockchain/header_metadata.rs - lowest_common_ancestor"),
+			   &id_one,
+			   &id_two,
+	);
+
+	// 获取两个树的最低优先祖先。
 	let mut header_one = backend.header_metadata(id_one)?;
 	let mut header_two = backend.header_metadata(id_two)?;
 
@@ -45,15 +53,18 @@ pub fn lowest_common_ancestor<Block: BlockT, T: HeaderMetadata<Block> + ?Sized>(
 	// We move through ancestor links as much as possible, since ancestor >= parent.
 
 	while header_one.number > header_two.number {
+		// 找到 one 的最先
 		let ancestor_one = backend.header_metadata(header_one.ancestor)?;
-
+		// 用祖先和 two 进行对比
 		if ancestor_one.number >= header_two.number {
+			// 如果还是比 two 的辈分小那么递归循环下去
 			header_one = ancestor_one;
 		} else {
 			break
 		}
 	}
 
+	// 反之如果 two 比 one 的辈分小，反过来搜索 header 的
 	while header_one.number < header_two.number {
 		let ancestor_two = backend.header_metadata(header_two.ancestor)?;
 
@@ -65,7 +76,8 @@ pub fn lowest_common_ancestor<Block: BlockT, T: HeaderMetadata<Block> + ?Sized>(
 	}
 
 	// Then we move the remaining path using parent links.
-
+	// 经过上面的操作，两个树的高度应该是一致了，这是判断两个树的Hash是否一致
+	// 如果一致就完事儿了，如果不一致，继续向上寻找他们一致的祖先
 	while header_one.hash != header_two.hash {
 		if header_one.number > header_two.number {
 			header_one = backend.header_metadata(header_one.parent)?;
@@ -75,7 +87,7 @@ pub fn lowest_common_ancestor<Block: BlockT, T: HeaderMetadata<Block> + ?Sized>(
 	}
 
 	// Update cached ancestor links.
-
+	// 更新 ancestor 连接
 	if orig_header_one.number > header_one.number {
 		orig_header_one.ancestor = header_one.hash;
 		backend.insert_header_metadata(orig_header_one.hash, orig_header_one);

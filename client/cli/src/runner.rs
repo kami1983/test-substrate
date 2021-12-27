@@ -159,9 +159,22 @@ impl<C: SubstrateCli> Runner<C> {
 		E: std::error::Error + Send + Sync + 'static + From<ServiceError>,
 	{
 		self.print_node_infos();
+		// 直接在这里进行了网络监听，通过 block_on() 实际上调用 service::new_light/new_full(config) 执行了 new_full 的函数
+		// 这个函数返回 F 他是定义好的 Output = TaskManager
+		log::info!("{} get task_manager RUN 1 new_full / new_ligth 在这里进行初始化，实际上就是一个创建任务的过程。",
+				   ansi_term::Colour::Red.bold().paint("@@@@@@"),
+		);
+		// 这个 task_manager 的 TaskManager 是通过 new_full 搞出来的，它对接了 babe/aura 的 start_slot_worker
 		let mut task_manager = self.tokio_runtime.block_on(initialize(self.config))?;
+
+		// 又开启了一个网络监听，实际上用阻塞的方式开启，执行的是 task_manager 的 future().fuse()
+		log::info!("{} get res RUN 2 这里通过阻塞方式开启 task_manager 的循环监听", ansi_term::Colour::Red.bold().paint("@@@@@@"));
 		let res = self.tokio_runtime.block_on(main(task_manager.future().fuse()));
+
+		log::info!("{} clean_shutdown res RUN 3 ", ansi_term::Colour::Red.bold().paint("@@@@@@"));
+		// 最后关闭时的阻塞
 		self.tokio_runtime.block_on(task_manager.clean_shutdown());
+		log::info!("{} 阻塞取消彻底关闭 ", ansi_term::Colour::Red.bold().paint("@@@@@@"));
 		Ok(res?)
 	}
 

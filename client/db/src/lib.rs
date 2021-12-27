@@ -714,6 +714,11 @@ impl<Block: BlockT> HeaderMetadata<Block> for BlockchainDb<Block> {
 	}
 
 	fn insert_header_metadata(&self, hash: Block::Hash, metadata: CachedHeaderMetadata<Block>) {
+		log::info!("{} 判断是否有共同祖先 hash ={:?}, metadata ={:?}, 这里是在写入 header_metadata 么？ ",
+				   ansi_term::Colour::Red.bold().paint("###### client/db/lib.rs - insert_header_metadata"),
+				   &hash,
+				   &metadata,
+		);
 		self.header_metadata_cache.insert_header_metadata(hash, metadata)
 	}
 
@@ -2850,7 +2855,10 @@ pub(crate) mod tests {
 	#[test]
 	fn lowest_common_ancestor_works() {
 		let backend = Backend::<Block>::new_test(1000, 100);
+		// 生成一个区块链
 		let blockchain = backend.blockchain();
+
+		// 生成区块0
 		let block0 = insert_header(&backend, 0, Default::default(), None, Default::default());
 
 		// fork from genesis: 3 prong.

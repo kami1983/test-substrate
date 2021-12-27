@@ -76,7 +76,9 @@ pub fn run() -> Result<()> {
 	match &cli.subcommand {
 		None => {
 			let runner = cli.create_runner(&cli.run)?;
+			// 调用 run_node_until_exit 实际上这个方法执行的是一个函数
 			runner.run_node_until_exit(|config| async move {
+				// 根据配置选择进行任务初始化方式，实际上返回的就是 Result<TaskManager, ServiceError>
 				match config.role {
 					Role::Light => service::new_light(config),
 					_ => service::new_full(config),

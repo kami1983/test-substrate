@@ -321,6 +321,7 @@ impl<AId> SessionHandler<AId> for Tuple {
 
 	fn on_new_session<Ks: OpaqueKeys>(
 		changed: bool,
+		// [StashId, 对应的RotateKey]
 		validators: &[(AId, Ks)],
 		queued_validators: &[(AId, Ks)],
 	) {
@@ -586,6 +587,7 @@ impl<T: Config> Module<T> {
 		let session_index = CurrentIndex::get();
 		log::trace!(target: "runtime::session", "rotating session {:?}", session_index);
 
+		// 队列变更的变量
 		let changed = QueuedChanged::get();
 
 		// Inform the session handlers that a session is going to end.
@@ -593,9 +595,16 @@ impl<T: Config> Module<T> {
 		T::SessionManager::end_session(session_index);
 
 		// Get queued session keys and validators.
+		// QueuedKeys 存储的结构是 Vec<StashId，Keys>
 		let session_keys = <QueuedKeys<T>>::get();
+
+		// 理论上新的用户KEY应该存储在这里输出看看
 		let validators =
 			session_keys.iter().map(|(validator, _)| validator.clone()).collect::<Vec<_>>();
+
+		log::debug!("LINDEBU::QueuedKeys 遍历出的结构是否有新的Session 推断可能没有，这里面是验证人以及对应的KEY应该 ： validators = {:?}", validators);
+
+		// 这个数组中只是存在当前合格的验证人，那么也即是说 QueuedKeys 不会包含新用户
 		<Validators<T>>::put(&validators);
 
 		if changed {
@@ -605,19 +614,24 @@ impl<T: Config> Module<T> {
 
 		// Increment session index.
 		let session_index = session_index + 1;
+		// 增加当前Session数据
 		CurrentIndex::put(session_index);
 
+		// 这里实际上通知staking，staking 就有可能调用选举了。
 		T::SessionManager::start_session(session_index);
 
 		// Get next validator set.
+		// 这里面实际上是 new_session 提供过来的数据，这些数据应该是选举过来的。
 		let maybe_next_validators = T::SessionManager::new_session(session_index + 1);
 		let (next_validators, next_identities_changed) =
 			if let Some(validators) = maybe_next_validators {
 				// NOTE: as per the documentation on `OnSessionEnding`, we consider
 				// the validator set as having changed even if the validators are the
 				// same as before, as underlying economic conditions may have changed.
+				// 产生换届，并且返回一个变更标识
 				(validators, true)
 			} else {
+				// 返回当前验证人并且标注没有产生换届。
 				(<Validators<T>>::get(), false)
 			};
 
@@ -627,14 +641,19 @@ impl<T: Config> Module<T> {
 			// validators along with the current and check for changes
 			let mut changed = next_identities_changed;
 
+			// 获取当前sessionkey 的迭代器。
 			let mut now_session_keys = session_keys.iter();
+
+			// 建立一个一个检查变更的函数，这个函数主要就是变更 changed 的状态，如果changed为true，那么就不检查了
 			let mut check_next_changed = |keys: &T::Keys| {
+				// 如果选举接口提供了数据，说明很可能有换届的人，这是后这个接口直接返回退出了。
 				if changed {
 					return
 				}
 				// since a new validator set always leads to `changed` starting
 				// as true, we can ensure that `now_session_keys` and `next_validators`
 				// have the same length. this function is called once per iteration.
+				// 否则判断session-key是否有更新，如果有那么表示changed变量
 				if let Some(&(_, ref old_keys)) = now_session_keys.next() {
 					if old_keys != keys {
 						changed = true;
@@ -642,24 +661,32 @@ impl<T: Config> Module<T> {
 					}
 				}
 			};
+
+			// 这队列的用户等于潜在变更 Validator的用户，那么就是和target的数据是一致的。
 			let queued_amalgamated = next_validators
 				.into_iter()
 				.map(|a| {
+					// !注意 load_keys 方法，用来读取某个 stash 对应的KEY
 					let k = Self::load_keys(&a).unwrap_or_default();
+					// 这里面只是判断，换届的用户对应的 rotate_key 是否发生变化，如果发生变化变更 changed 的标量值。
 					check_next_changed(&k);
 					(a, k)
 				})
 				.collect::<Vec<_>>();
 
+			// 将结果返回
 			(queued_amalgamated, changed)
 		};
 
+		// 当前换届的数据直接进行更新。
 		<QueuedKeys<T>>::put(queued_amalgamated.clone());
+		// 设置，是否发生变化的标量，
 		QueuedChanged::put(next_changed);
 
 		// Record that this happened.
 		Self::deposit_event(Event::NewSession(session_index));
 
+		// 第一个参数 session_keys 是当前的 session_keys queued_amalgamated 是换届后的session密钥对。
 		// Tell everyone about the new session keys.
 		T::SessionHandler::on_new_session::<T::Keys>(changed, &session_keys, &queued_amalgamated);
 	}
@@ -757,11 +784,16 @@ impl<T: Config> Module<T> {
 	/// This ensures that the reference counter in system is incremented appropriately and as such
 	/// must accept an account ID, rather than a validator ID.
 	fn do_set_keys(account: &T::AccountId, keys: T::Keys) -> dispatch::DispatchResult {
+		// 传入的是 controller 用户，通过转换转换成 stash 账户
 		let who = T::ValidatorIdOf::convert(account.clone())
 			.ok_or(Error::<T>::NoAssociatedValidatorId)?;
 
+
 		ensure!(frame_system::Pallet::<T>::can_inc_consumer(&account), Error::<T>::NoAccount);
+
+		// 用 stash 和这个值做了一个绑定
 		let old_keys = Self::inner_set_keys(&who, keys)?;
+
 		if old_keys.is_none() {
 			let assertion = frame_system::Pallet::<T>::inc_consumers(&account).is_ok();
 			debug_assert!(assertion, "can_inc_consumer() returned true; no change since; qed");
@@ -780,6 +812,8 @@ impl<T: Config> Module<T> {
 		who: &T::ValidatorId,
 		keys: T::Keys,
 	) -> Result<Option<T::Keys>, DispatchError> {
+
+		// 从当前的 stash 账户中读取全部的KEY值
 		let old_keys = Self::load_keys(who);
 
 		for id in T::Keys::key_ids() {
@@ -806,6 +840,7 @@ impl<T: Config> Module<T> {
 			Self::put_key_owner(*id, key, who);
 		}
 
+		// who 是 stash 绑定到当亲的 key 上。
 		Self::put_keys(who, &keys);
 		Ok(old_keys)
 	}

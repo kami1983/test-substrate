@@ -682,12 +682,17 @@ pub mod pallet {
 	#[pallet::hooks]
 	impl<T: Config> Hooks<BlockNumberFor<T>> for Pallet<T> {
 		fn on_initialize(now: T::BlockNumber) -> Weight {
+			// assume: 40, [10..20], return 40
 			let next_election = T::DataProvider::next_election_prediction(now).max(now);
 
+			// 10 + 10 = 20
 			let signed_deadline = T::SignedPhase::get() + T::UnsignedPhase::get();
+			// = 10
 			let unsigned_deadline = T::UnsignedPhase::get();
 
+			// 40 - [10..20] = [30..20]
 			let remaining = next_election - now;
+			// ?
 			let current_phase = Self::current_phase();
 
 			log!(
@@ -698,6 +703,7 @@ pub mod pallet {
 				Self::snapshot_metadata()
 			);
 			match current_phase {
+				// [30..20] <= 20 && [30..20] > 10 [ by = current_bn = 20 ]
 				Phase::Off if remaining <= signed_deadline && remaining > unsigned_deadline => {
 					// NOTE: if signed-phase length is zero, second part of the if-condition fails.
 					match Self::create_snapshot() {

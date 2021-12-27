@@ -27,6 +27,8 @@ use sc_consensus_epochs::{migration::EpochChangesForV0, EpochChangesFor, SharedE
 use sp_blockchain::{Error as ClientError, Result as ClientResult};
 use sp_consensus_babe::{BabeBlockWeight, BabeGenesisConfiguration};
 use sp_runtime::traits::Block as BlockT;
+use sp_core::hexdisplay::HexDisplay;
+use sp_runtime::sp_std;
 
 const BABE_EPOCH_CHANGES_VERSION: &[u8] = b"babe_epoch_changes_version";
 const BABE_EPOCH_CHANGES_KEY: &[u8] = b"babe_epoch_changes";
@@ -98,7 +100,16 @@ where
 	F: FnOnce(&[(&'static [u8], &[u8])]) -> R,
 {
 	BABE_EPOCH_CHANGES_CURRENT_VERSION.using_encoded(|version| {
+
 		let encoded_epoch_changes = epoch_changes.encode();
+
+
+		log::info!("{} 这里是 aux_schema 的 write_epoch_changes 方法，对 epoch_changes 进行了 encode 之后会调用闭包函数 encoded_epoch_changes.to_hex =  {:?} ,换算成STR = {:?}",
+				   ansi_term::Colour::Red.bold().paint("@@@@@"),
+				   HexDisplay::from(&encoded_epoch_changes),
+				   sp_std::str::from_utf8(&encoded_epoch_changes),
+		);
+
 		write_aux(&[
 			(BABE_EPOCH_CHANGES_KEY, encoded_epoch_changes.as_slice()),
 			(BABE_EPOCH_CHANGES_VERSION, version),

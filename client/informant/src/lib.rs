@@ -78,13 +78,21 @@ pub async fn build<B: BlockT, C>(
 	C: UsageProvider<B> + HeaderMetadata<B> + BlockchainEvents<B>,
 	<C as HeaderMetadata<B>>::Error: Display,
 {
+	log::info!("{} Information 的build 并不会被反复触发，只会触发一次",
+		ansi_term::Colour::Red.bold().paint("###### information/lib.rs/build"),
+	);
+
 	let mut display = display::InformantDisplay::new(format.clone());
 
 	let client_1 = client.clone();
-
+	// interval 创建一个数据流，每个 Duration(5000) 返回一个新的值
 	let display_notifications = interval(Duration::from_millis(5000))
 		.filter_map(|_| async {
 			let status = network.status().await;
+			log::info!("{} 创建 display_notifications 的流程不详，过滤掉err的数据，这里只是保留状态是ok的数据流， is_ok? ={:?}",
+					   ansi_term::Colour::Red.bold().paint("###### information/lib.rs/build - make display_notifications"),
+					   status.is_ok(),
+			);
 			status.ok()
 		})
 		.for_each(move |net_status| {
@@ -103,10 +111,17 @@ pub async fn build<B: BlockT, C>(
 				"Subsystems memory [txpool: {} kB]",
 				parity_util_mem::malloc_size(&*pool) / 1024,
 			);
+			log::info!("{} 准备显示状态，这里面调用 display.display(info) 显示：info = client_1.usage_info(): {:?} net_status：这里面就是网络状态，连接几个节点同步速度一类的数据",
+					   ansi_term::Colour::Red.bold().paint("###### information/lib.rs/build - make display_notifications"),
+					   &info,
+			);
 			display.display(&info, net_status);
 			future::ready(())
 		});
 
+	log::info!("{} 如果不是循环触发，这里应该不会进入才对",
+			   ansi_term::Colour::Blue.bold().paint("###### information/lib.rs/build - futures::select!"),
+	);
 	futures::select! {
 		() = display_notifications.fuse() => (),
 		() = display_block_import(client).fuse() => (),
@@ -127,35 +142,72 @@ where
 	let mut last_blocks = VecDeque::new();
 	let max_blocks_to_track = 100;
 
+	log::info!("{} 进入 display_block_import first-last_best 这里是进入区块import的相应方法中 = {:?} 这个实际上是被 task_manager 的函数调用。这个信息只在首区块中才会出现，之后就进入消息的循环监听中。",
+			   ansi_term::Colour::Red.bold().paint("######1"),
+			   &last_best
+	);
+
+	// 这里实际上是一个 client 的数据流监听，循环内容会反复
+	// 获取块导入事件流。 不保证每个导入的块都会被触发。
 	client.import_notification_stream().for_each(move |n| {
+		log::info!("{} 进入 client.import_notification_stream() 就是一个TCP监听，这个实际上是监听结果然后输出用的这里面没有任何的处理。 n = 不打印n， last_best 这个值很重要用来判断是否出现分叉 = {:?}",
+				   ansi_term::Colour::Red.bold().paint("###### clinet/information/lib.rs"),
+				   // &n, // n 就是 BlockImportNotification 是一个区块导入的通知，那么具体这个通知是哪儿发出的？
+			       &last_best,
+		);
+
+		log::info!("{} 判断是否出现分叉，首先网络上的数据 n.header.parent_hash() = {:?}，然后本地缓存的数据 last_hash = {:?} 如果他们不一致就会进入分叉处理，实际上是校对本地的缓存。",
+				   ansi_term::Colour::Red.bold().paint("###### clinet/information/lib.rs"),
+				   n.header.parent_hash(),
+				   &last_best,
+		);
 		// detect and log reorganizations.
 		if let Some((ref last_num, ref last_hash)) = last_best {
 			if n.header.parent_hash() != last_hash && n.is_new_best {
+				// 注意 lowest_common_ancestor 方法，这个方法并不单纯的获取共同祖先这里面他也会更新缓存
 				let maybe_ancestor =
 					sp_blockchain::lowest_common_ancestor(&*client, last_hash.clone(), n.hash);
 
+				log::info!("{} 判断是否有共同祖先 last_num={:?}, last_hash={:?}, maybe_ancestor = 看不到 ",
+						   ansi_term::Colour::Red.bold().paint("######2.1"),
+						   last_num,
+						   last_hash,
+				);
 				match maybe_ancestor {
 					Ok(ref ancestor) if ancestor.hash != *last_hash => info!(
 						"♻️  Reorg on #{},{} to #{},{}, common ancestor #{},{}",
-						Colour::Red.bold().paint(format!("{}", last_num)),
-						last_hash,
+						Colour::Red.bold().paint(format!("{}", last_num)),// 出错的高度
+						last_hash, // 本地最后的Hash
 						Colour::Green.bold().paint(format!("{}", n.header.number())),
-						n.hash,
+						n.hash, // 网络中的Hash
 						Colour::White.bold().paint(format!("{}", ancestor.number)),
 						ancestor.hash,
 					),
-					Ok(_) => {},
+					Ok(info) => {
+						log::info!("{} 这是正常的情况 = {:?} ",
+								   ansi_term::Colour::Red.bold().paint("######2.2"),
+								   &info
+						);
+					},
 					Err(e) => debug!("Error computing tree route: {}", e),
 				}
 			}
 		}
 
+		log::info!("{} 判断 n: BlockImportNotification 是不是 is_new_best = {:?} 如果是那么更新 last_best 否则不更新 ",
+			ansi_term::Colour::Red.bold().paint("######2.1"),
+			&n.is_new_best,
+		);
+
+
 		if n.is_new_best {
+			// 本地的 last_best 实际上就算断线也不会出现不一致的情况，这种情况通常是
 			last_best = Some((n.header.number().clone(), n.hash.clone()));
 		}
 
 		// If we already printed a message for a given block recently,
 		// we should not print it again.
+		// 这里主要判断是否已经包含这个块儿的打印如果已经包括那么就不需要在进行打印了
 		if !last_blocks.contains(&n.hash) {
 			last_blocks.push_back(n.hash.clone());
 

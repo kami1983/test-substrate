@@ -22,6 +22,7 @@ wasmtime = ["sc-executor/wasmtime"]
 test-helpers = []
 
 [dependencies]
+ansi_term = "0.12.1"
 thiserror = "1.0.21"
 futures = "0.3.16"
 jsonrpc-pubsub = "18.0"

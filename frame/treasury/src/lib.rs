@@ -231,7 +231,7 @@ pub mod pallet {
 		#[deprecated(
 			note = "use `<GensisConfig<T, I> as GenesisBuild<T, I>>::assimilate_storage` instead"
 		)]
-		pub fn assimilate_storage<T: Config<I>, I: 'static>(
+		pub fn assimilate_storage<T: Config<I>, I: 'static> (
 			&self,
 			storage: &mut sp_runtime::Storage,
 		) -> Result<(), String> {
@@ -454,11 +454,13 @@ impl<T: Config<I>, I: 'static> Pallet<T, I> {
 			&mut missed_any,
 		);
 
+
 		if !missed_any {
 			// burn some proportion of the remaining budget if we run a surplus.
 			let burn = (T::Burn::get() * budget_remaining).min(budget_remaining);
 			budget_remaining -= burn;
 
+			// (Self::PositiveImbalance, Self::NegativeImbalance)
 			let (debit, credit) = T::Currency::pair(burn);
 			imbalance.subsume(debit);
 			T::BurnDestination::on_unbalanced(credit);

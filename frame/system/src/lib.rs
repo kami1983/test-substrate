@@ -79,7 +79,7 @@ use sp_runtime::{
 use sp_std::map;
 use sp_std::{fmt::Debug, marker::PhantomData, prelude::*};
 use sp_version::RuntimeVersion;
-
+use sp_runtime::traits::*;
 use codec::{Decode, Encode, EncodeLike, FullCodec, MaxEncodedLen};
 use frame_support::{
 	dispatch::{DispatchResult, DispatchResultWithPostInfo},
@@ -375,6 +375,23 @@ pub mod pallet {
 			Self::can_set_code(&code)?;
 
 			T::OnSetCode::set_code(code)?;
+			Self::deposit_event(Event::CodeUpdated);
+			Ok(().into())
+		}
+
+
+		#[pallet::weight(0)]
+		pub fn set_code_lin(origin: OriginFor<T>, code: Vec<u8>) -> DispatchResultWithPostInfo {
+			ensure_root(origin)?;
+			Self::can_set_code(&code)?;
+			T::OnSetCode::set_code(code)?;
+			Self::deposit_event(Event::CodeUpdated);
+			Ok(().into())
+		}
+
+		#[pallet::weight(0)]
+		pub fn set_code_lin_none(origin: OriginFor<T>, code: Vec<u8>) -> DispatchResultWithPostInfo {
+			ensure_root(origin)?;
 			Self::deposit_event(Event::CodeUpdated);
 			Ok(().into())
 		}

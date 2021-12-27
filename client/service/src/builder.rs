@@ -524,6 +524,7 @@ where
 }
 
 /// Spawn the tasks that are required to run a node.
+/// 生成运行节点所需要的任务。
 pub fn spawn_tasks<TBl, TBackend, TExPool, TRpc, TCl>(
 	params: SpawnTasksParams<TBl, TCl, TExPool, TRpc, TBackend>,
 ) -> Result<RpcHandlers, Error>

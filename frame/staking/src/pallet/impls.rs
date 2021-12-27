@@ -105,13 +105,17 @@ impl<T: Config> Pallet<T> {
 			.claimed_rewards
 			.retain(|&x| x >= current_era.saturating_sub(history_depth));
 		match ledger.claimed_rewards.binary_search(&era) {
+			// 如果账本中存在这个时区的记录那么直接报错，报告已经领取了该era的奖励。
 			Ok(_) => Err(Error::<T>::AlreadyClaimed
 				.with_weight(T::WeightInfo::payout_stakers_alive_staked(0)))?,
+			// 如果没找到那么 Err(pos)就是对应Vec的空缺下标，这时对这个空缺下标插入时区标记即可。
 			Err(pos) => ledger.claimed_rewards.insert(pos, era),
 		}
 
+		// 获取曝光切片，这里面记录了每个Era对应的，验证人是谁他们的提名人是谁，分别各自质押了多少资金，用来后续的利润分配使用
 		let exposure = <ErasStakersClipped<T>>::get(&era, &ledger.stash);
 
+		// 一切数据准备妥善，这下面的代码处理理论上不会出现错误。
 		// Input data seems good, no errors allowed after this point
 
 		<Ledger<T>>::insert(&controller, &ledger);
@@ -123,41 +127,54 @@ impl<T: Config> Pallet<T> {
 		// Then look at the validator, figure out the proportion of their reward
 		// which goes to them and each of their nominators.
 
+		// 获取对应时区的总奖励点数
 		let era_reward_points = <ErasRewardPoints<T>>::get(&era);
 		let total_reward_points = era_reward_points.total;
+		// 获取验证人对应的点数记录，这个 individual 是一个BtreeMap
 		let validator_reward_points = era_reward_points
 			.individual
+			// 获取对应验证人你的点数
 			.get(&ledger.stash)
 			.map(|points| *points)
 			.unwrap_or_else(|| Zero::zero());
 
 		// Nothing to do if they have no reward points.
 		if validator_reward_points.is_zero() {
+			// 没有点数那么也不会报错，直接退出了。
 			return Ok(Some(T::WeightInfo::payout_stakers_alive_staked(0)).into())
 		}
 
 		// This is the fraction of the total reward that the validator and the
 		// nominators will get.
+		// 计算当前验证人分配的奖励在总数量中的占比
 		let validator_total_reward_part =
 			Perbill::from_rational(validator_reward_points, total_reward_points);
 
 		// This is how much validator + nominators are entitled to.
+		// 计算验证人应该获得的奖励=（验证人奖励占比*总奖励Token）
 		let validator_total_payout = validator_total_reward_part * era_payout;
 
+		// 读取验证人存储的偏好数据，这个数据用来分配到底给提名人多少奖励
 		let validator_prefs = Self::eras_validator_prefs(&era, &validator_stash);
 		// Validator first gets a cut off the top.
 		let validator_commission = validator_prefs.commission;
+		// 计算验证人分配的佣金部分，如果 commission = 100% 那么雅正人就会分走全部的钱。
+		// 试想一下，如果 validator_commission = 1 那么 validator_commission_payout= validator_total_payout
 		let validator_commission_payout = validator_commission * validator_total_payout;
 
+		// 计算扣除验证人的奖励之后还剩下多少钱，如果上面是100那么这个数值就可能是0了。
 		let validator_leftover_payout = validator_total_payout - validator_commission_payout;
 		// Now let's calculate how this is split to the validator.
+		// 计算验证人在总质押金额中的质押占比
 		let validator_exposure_part = Perbill::from_rational(exposure.own, exposure.total);
+		// 计算验证人应该拿走多少钱。
 		let validator_staking_payout = validator_exposure_part * validator_leftover_payout;
 
 		Self::deposit_event(Event::<T>::PayoutStarted(era, ledger.stash.clone()));
 
 		// We can now make total validator payout:
 		if let Some(imbalance) =
+			// 首先分配给验证人的钱 = 验证人质押的钱 + 验证人的佣金。
 			Self::make_payout(&ledger.stash, validator_staking_payout + validator_commission_payout)
 		{
 			Self::deposit_event(Event::<T>::Rewarded(ledger.stash, imbalance.peek()));
@@ -173,6 +190,7 @@ impl<T: Config> Pallet<T> {
 		for nominator in exposure.others.iter() {
 			let nominator_exposure_part = Perbill::from_rational(nominator.value, exposure.total);
 
+			// 如果验证人100%佣金那么实际上提名人可能就拿不到任何钱了，因为 validator_leftover_payout = 0
 			let nominator_reward: BalanceOf<T> =
 				nominator_exposure_part * validator_leftover_payout;
 			// We can now make nominator payout:
@@ -258,7 +276,7 @@ impl<T: Config> Pallet<T> {
 				},
 			}
 
-			// New era.
+			// New era. // 这里面  try_trigger_new_era 返回的是选举后的结果。
 			let maybe_new_era_validators = Self::try_trigger_new_era(session_index, is_genesis);
 			if maybe_new_era_validators.is_some() &&
 				matches!(ForceEra::<T>::get(), Forcing::ForceNew)
@@ -357,6 +375,7 @@ impl<T: Config> Pallet<T> {
 			let era_duration = (now_as_millis_u64 - active_era_start).saturated_into::<u64>();
 			let staked = Self::eras_total_stake(&active_era.index);
 			let issuance = T::Currency::total_issuance();
+			// 通过总资产，Era持续时间，总质押量计算出当前这个Era对应的Token奖励 （staking目前用的是一种曲线算法）
 			let (validator_payout, rest) = T::EraPayout::era_payout(staked, issuance, era_duration);
 
 			Self::deposit_event(Event::<T>::EraPaid(active_era.index, validator_payout, rest));
@@ -731,6 +750,7 @@ impl<T: Config> Pallet<T> {
 			CounterForValidators::<T>::mutate(|x| x.saturating_inc())
 		}
 		Validators::<T>::insert(who, prefs);
+
 	}
 
 	/// This function will remove a validator from the `Validators` storage map,

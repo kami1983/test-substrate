@@ -140,6 +140,7 @@ impl<T: Config> OneSessionHandler<T::AccountId> for Pallet<T> {
 	{
 		// Remember who the authorities are for the new and next session.
 		if changed {
+			// 获取第二个数组中 Discovery id
 			let keys = validators.map(|x| x.1).collect::<Vec<_>>();
 
 			let bounded_keys = WeakBoundedVec::<_, T::MaxAuthorities>::force_from(
@@ -150,6 +151,7 @@ impl<T: Config> OneSessionHandler<T::AccountId> for Pallet<T> {
 				),
 			);
 
+			// 这里面的 on_new_session 都应该是具有发现者私钥的用户
 			Keys::<T>::put(bounded_keys);
 
 			let next_keys = queued_validators.map(|x| x.1).collect::<Vec<_>>();

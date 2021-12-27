@@ -1279,6 +1279,9 @@ where
 	// FIXME #1483: clone only when changed
 	let old_authority_set = authority_set.clone();
 
+	log::info!("{} 到底是哪一个 lock_import_and_run 被触发了O1  ",
+			   ansi_term::Colour::Red.bold().paint("###### finality-grandpa/environment.rs/finalize_block"),
+	);
 	let update_res: Result<_, Error> = client.lock_import_and_run(|import_op| {
 		let status = authority_set
 			.apply_standard_changes(

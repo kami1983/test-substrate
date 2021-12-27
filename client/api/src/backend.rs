@@ -76,6 +76,7 @@ pub struct ImportSummary<Block: BlockT> {
 }
 
 /// Import operation wrapper
+/// 导入操作的包装器
 pub struct ClientImportOperation<Block: BlockT, B: Backend<Block>> {
 	/// DB Operation.
 	pub op: B::BlockImportOperation,
@@ -86,6 +87,7 @@ pub struct ClientImportOperation<Block: BlockT, B: Backend<Block>> {
 }
 
 /// Helper function to apply auxiliary data insertion into an operation.
+/// 一个负责将数据插入到应用操作的辅助函数
 pub fn apply_aux<'a, 'b: 'a, 'c: 'a, B, Block, D, I>(
 	operation: &mut ClientImportOperation<Block, B>,
 	insert: I,
@@ -97,6 +99,7 @@ where
 	I: IntoIterator<Item = &'a (&'c [u8], &'c [u8])>,
 	D: IntoIterator<Item = &'a &'b [u8]>,
 {
+	// 这里应该就是是数据插入的辅助方法，插入的实际上是导入操作
 	operation.op.insert_aux(
 		insert
 			.into_iter()

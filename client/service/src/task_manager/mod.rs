@@ -186,6 +186,7 @@ impl SpawnEssentialTaskHandle {
 		name: &'static str,
 		task: impl Future<Output = ()> + Send + 'static,
 	) {
+
 		self.spawn_inner(name, task, TaskType::Blocking)
 	}
 

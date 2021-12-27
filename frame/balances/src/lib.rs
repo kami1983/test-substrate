@@ -1937,6 +1937,7 @@ where
 		Reserves::<T, I>::mutate(who, |reserves| -> (Self::NegativeImbalance, Self::Balance) {
 			match reserves.binary_search_by_key(id, |data| data.id) {
 				Ok(index) => {
+					// 100,200
 					let to_change = cmp::min(reserves[index].amount, value);
 
 					let (imb, remain) =

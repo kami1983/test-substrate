@@ -20,7 +20,7 @@
 #![cfg(test)]
 
 use std::cell::RefCell;
-
+use core::mem::drop;
 use sp_core::H256;
 use sp_runtime::{
 	testing::Header,
@@ -28,12 +28,15 @@ use sp_runtime::{
 };
 
 use frame_support::{
-	assert_noop, assert_ok, pallet_prelude::GenesisBuild, parameter_types, traits::OnInitialize,
+	assert_noop, assert_ok, pallet_prelude::GenesisBuild, parameter_types,
+	traits::{OnInitialize},
 	PalletId,
 };
 
+
 use super::*;
 use crate as treasury;
+use frame_system::Account;
 
 type UncheckedExtrinsic = frame_system::mocking::MockUncheckedExtrinsic<Test>;
 type Block = frame_system::mocking::MockBlock<Test>;
@@ -387,5 +390,84 @@ fn max_approvals_limited() {
 			Treasury::approve_proposal(Origin::root(), 0),
 			Error::<Test, _>::TooManyApprovals
 		);
+	});
+}
+
+#[test]
+fn test_linhai_PositiveImbalanceOf() {
+	new_test_ext().execute_with(|| {
+		Balances::make_free_balance_be(&Treasury::account_id(), 50000);
+		assert_eq!(Balances::free_balance(&Treasury::account_id()), 50000);
+		assert_eq!(Balances::total_issuance(), 50199);
+
+		let positive_imbalance = Balances::deposit_creating(&111, 10000);
+		println!("positive_imbalance = {:?}", positive_imbalance);
+		assert_eq!(Balances::free_balance(&Treasury::account_id()), 50000);
+		assert_eq!(Balances::free_balance(&111), 10000);
+		assert_eq!(Balances::total_issuance(), 50199);
+
+		let mut imbalance = <PositiveImbalanceOf<Test, ()>>::zero();
+		imbalance.subsume(positive_imbalance);
+
+		let positive_imbalance = Balances::deposit_creating(&222, 10000);
+		imbalance.subsume(positive_imbalance);
+		println!("imbalance.subsume(100) = {:?}",imbalance );
+
+		Balances::settle(&Treasury::account_id(), imbalance, WithdrawReasons::TRANSFER, KeepAlive);
+		assert_eq!(Balances::total_issuance(), 50199);
+		assert_eq!(Balances::free_balance(&Treasury::account_id()), 30000);
+
+	});
+}
+
+#[test]
+fn test_linhai_NegativeImbalanceOf() {
+	new_test_ext().execute_with(|| {
+		Balances::make_free_balance_be(&Treasury::account_id(), 50000);
+		assert_eq!(Balances::free_balance(&Treasury::account_id()), 50000);
+		assert_eq!(Balances::total_issuance(), 50199);
+
+		let negative_imbalance = Balances::slash(&Treasury::account_id(), 10000);
+		println!("positive_imbalance = {:?}", negative_imbalance);
+		assert_eq!(Balances::total_issuance(), 50199);
+		assert_eq!(Balances::free_balance(&Treasury::account_id()), 40000);
+		assert_eq!(Balances::total_issuance(), 50199);
+		drop(negative_imbalance);
+		assert_eq!(Balances::total_issuance(), 40199);
+
+	});
+}
+
+#[test]
+fn test_linhai_PositiveImbalanceOf_2() {
+	new_test_ext().execute_with(|| {
+
+		Balances::make_free_balance_be(&Treasury::account_id(), 50000);
+		assert_eq!(Balances::free_balance(&Treasury::account_id()), 50000);
+		assert_eq!(Balances::total_issuance(), 50199);
+
+		let positive_imbalance = Balances::deposit_creating(&111, 10000);
+		println!("positive_imbalance = {:?}", positive_imbalance);
+		assert_eq!(Balances::free_balance(&Treasury::account_id()), 50000);
+		assert_eq!(Balances::free_balance(&111), 10000);
+		assert_eq!(Balances::total_issuance(), 50199);
+
+		let mut imbalance = <PositiveImbalanceOf<Test, ()>>::zero();
+		imbalance.subsume(positive_imbalance);
+
+		let positive_imbalance = Balances::deposit_creating(&222, 10000);
+		assert_eq!(Balances::free_balance(&222), 10000);
+		imbalance.subsume(positive_imbalance);
+
+
+		// Balances::settle(&Treasury::account_id(), imbalance, WithdrawReasons::TRANSFER, KeepAlive);
+		// assert_eq!(Balances::total_issuance(), 50199);
+		// assert_eq!(Balances::free_balance(&Treasury::account_id()), 30000);
+		drop(imbalance);
+		assert_eq!(Balances::free_balance(&Treasury::account_id()), 50000);
+		assert_eq!(Balances::free_balance(&111), 10000);
+		assert_eq!(Balances::free_balance(&222), 10000);
+		assert_eq!(Balances::total_issuance(), 70199);
+
 	});
 }

@@ -313,6 +313,9 @@ pub(crate) mod tests {
 	}
 
 	fn store_best_justification(client: &TestClient, just: &GrandpaJustification<Block>) {
+		log::info!("{} 到底是哪一个 lock_import_and_run 被触发了O2  ",
+				   ansi_term::Colour::Red.bold().paint("###### finality-grandpa/finality_proof.rs/store_best_justification"),
+		);
 		client
 			.lock_import_and_run(|import_op| {
 				crate::aux_schema::update_best_justification(just, |insert| {

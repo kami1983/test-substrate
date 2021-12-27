@@ -512,6 +512,9 @@ where
 	};
 
 	info!(target: "babe", "👶 Starting BABE Authorship worker");
+	log::info!("{} 开启Babe共识这实际上是一个 Future 的实现，实际上是被 service.rs 的 new_full_base 调用的，对接到run.run_node_until_exit 触发的方法。",
+		ansi_term::Colour::Red.bold().paint("***** consensus/babe"),
+	);
 	let inner = sc_consensus_slots::start_slot_worker(
 		config.0.clone(),
 		select_chain,
@@ -1348,6 +1351,10 @@ where
 		let parent_hash = *block.header.parent_hash();
 		let number = *block.header.number();
 
+		log::info!("{} import_state 运行中 hash={:?}, number={:?},parent_hash={:?}",
+				   ansi_term::Colour::Red.bold().paint("@@@@@@"),
+				   &hash, &number, &parent_hash);
+
 		block.fork_choice = Some(ForkChoiceStrategy::Custom(true));
 		// Reset block weight.
 		aux_schema::write_block_weight(hash, 0, |values| {
@@ -1380,6 +1387,10 @@ where
 		let mut epoch_changes = self.epoch_changes.shared_data_locked();
 		epoch_changes.reset(parent_hash, hash, number, current_epoch.into(), next_epoch.into());
 		aux_schema::write_epoch_changes::<Block, _, _>(&*epoch_changes, |insert| {
+			// 这里写入区块的信息
+			log::info!("{} 猜测这里写入了数据库，这里实际上是一个闭包：insert = {:?}, ",
+					   ansi_term::Colour::Red.bold().paint("@@@@@@ / consensus/babe/lib - import_state"),
+					   &insert);
 			self.client.insert_aux(insert, [])
 		})
 		.map_err(|e| ConsensusError::ClientImport(e.to_string()))?;
@@ -1411,9 +1422,17 @@ where
 		mut block: BlockImportParams<Block, Self::Transaction>,
 		new_cache: HashMap<CacheKeyId, Vec<u8>>,
 	) -> Result<ImportResult, Self::Error> {
+		// 获取Hash，hash 是通过区块摘要生成的
 		let hash = block.post_hash();
+		// Nubmer
 		let number = *block.header.number();
 
+		log::info!("{} Babe 共识的 import_block() 区块的 block.post_hash() ={:?}, header.number = {:?}",
+				   ansi_term::Colour::Red.bold().paint("@@@@@@ consensus/babe"),
+				   hash, number);
+		log::info!("{} self.client.status() = {:?}",
+				   ansi_term::Colour::Red.bold().paint("------ consensus/babe"),
+				   self.client.status(BlockId::Hash(hash)) );
 		// early exit if block already in chain, otherwise the check for
 		// epoch changes will error when trying to re-import an epoch change
 		match self.client.status(BlockId::Hash(hash)) {
@@ -1421,16 +1440,34 @@ where
 				// When re-importing existing block strip away intermediates.
 				let _ = block.take_intermediate::<BabeIntermediate<Block>>(INTERMEDIATE_KEY);
 				block.fork_choice = Some(ForkChoiceStrategy::Custom(false));
+				// 这里发送请求
+				log::info!("{} 这里发送请求 self.inner.import_block().await 这个请求发送后对应的 client information import_notification_stream 就会收到对应消息 block = 打不出来, new_cache = {:?}",
+						   ansi_term::Colour::Red.bold().paint("------ consensus/babe"),
+						   &new_cache,
+				);
 				return self.inner.import_block(block, new_cache).await.map_err(Into::into)
 			},
-			Ok(sp_blockchain::BlockStatus::Unknown) => {},
+			Ok(sp_blockchain::BlockStatus::Unknown) => {
+				log::info!("{} Unknown 的话执行这里，实际上什么也没做",
+					ansi_term::Colour::Red.bold().paint("------ consensus/babe"),
+				);
+			},
 			Err(e) => return Err(ConsensusError::ClientImport(e.to_string())),
 		}
 
+		// 上面有一个 import_block 下面有一个 import_state , import_block 实际上就是当前自己， import_state 实际上是
+		// import_block 的包装方法，只是fork 策略不同它的是  Some(ForkChoiceStrategy::Custom(true))
+		//
+
+		// 检查区块是否包含状态导入操作
 		if block.with_state() {
+			log::info!("{} 检查区块是否包含状态导入操作，发现包含则执行导入操作，new_cache = {:?}",
+					   ansi_term::Colour::Red.bold().paint("------ consensus/babe"),
+					   new_cache );
 			return self.import_state(block, new_cache).await
 		}
 
+		//如果知道Hash说不定可以通过 find_pre_digest 读取一下试试
 		let pre_digest = find_pre_digest::<Block>(&block.header).expect(
 			"valid babe headers must contain a predigest; header has been already verified; qed",
 		);
@@ -1452,6 +1489,12 @@ where
 			 been verified; qed",
 		);
 
+
+		log::info!("{} 确保插槽编号严格增加 pre_digest.slot(){:?} <= {:?} 如果 false 会出现异常",
+				   ansi_term::Colour::Red.bold().paint("@@@@@@ consensus/babe"),
+				   slot,
+				   parent_slot
+		);
 		// make sure that slot number is strictly increasing
 		if slot <= parent_slot {
 			return Err(ConsensusError::ClientImport(
@@ -1589,7 +1632,14 @@ where
 					return Err(e)
 				}
 
+				log::info!("{} 即将调用aux_schema::write_epoch_changes，但是感觉 insert 的闭包并不是每次都会触发。epoch_changes = 没法打印",
+						   ansi_term::Colour::Red.bold().paint("@@@@@ consensus/babe"),
+				);
 				crate::aux_schema::write_epoch_changes::<Block, _, _>(&*epoch_changes, |insert| {
+					log::info!("{} write_epoch_changes 的闭包被调用 insert = {:?}",
+							   ansi_term::Colour::Red.bold().paint("@@@@@ consensus/babe"),
+							   &insert,
+					);
 					block
 						.auxiliary
 						.extend(insert.iter().map(|(k, v)| (k.to_vec(), Some(v.to_vec()))))

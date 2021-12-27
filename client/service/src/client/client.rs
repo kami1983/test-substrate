@@ -1130,6 +1130,9 @@ where
 			);
 		}
 
+		log::info!("{} 区块导入是不是从这里？I1区。",
+				   ansi_term::Colour::Red.bold().paint("*** client/client.rs/notify_imported/"),
+		);
 		let notification = BlockImportNotification::<Block> {
 			hash: notify_import.hash,
 			origin: notify_import.origin,
@@ -1895,6 +1898,9 @@ where
 				PrepareStorageChangesResult::Import(storage_changes) => storage_changes,
 			};
 
+		log::info!("{} 到底是哪一个 lock_import_and_run 被触发了O4  ",
+				   ansi_term::Colour::Red.bold().paint("###### service/client/client.rs/import_block"),
+		);
 		self.lock_import_and_run(|operation| {
 			self.apply_block(operation, import_block, new_cache, storage_changes)
 		})
@@ -2030,6 +2036,9 @@ where
 		justification: Option<Justification>,
 		notify: bool,
 	) -> sp_blockchain::Result<()> {
+		log::info!("{} 到底是哪一个 lock_import_and_run 被触发了O6  ",
+				   ansi_term::Colour::Red.bold().paint("###### service/client/client.rs/finalize_block"),
+		);
 		self.lock_import_and_run(|operation| {
 			self.apply_finality(operation, id, justification, notify)
 		})
@@ -2163,6 +2172,9 @@ where
 		// operations that tries to set aux data. Note that for consensus
 		// layer, one can always use atomic operations to make sure
 		// import is only locked once.
+		log::info!("{} 到底是哪一个 lock_import_and_run 被触发了O5  ",
+				   ansi_term::Colour::Red.bold().paint("###### client/client.rs/insert_aux"),
+		);
 		self.lock_import_and_run(|operation| apply_aux(operation, insert, delete))
 	}
 	/// Query auxiliary data from key-value store.

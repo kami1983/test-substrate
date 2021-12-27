@@ -275,6 +275,9 @@ pub fn new_full_base(
 	let enable_grandpa = !config.disable_grandpa;
 	let prometheus_registry = config.prometheus_registry().cloned();
 
+	log::info!("{} 这里是 new_full_base 的调用方法，这里面理论上只能进入一次，sc_service::spawn_tasks 最终调用 build.rs/spawn_tasks 调用 sc_informant::build 生成消息任务。",
+			   ansi_term::Colour::Red.bold().paint("** service.rs/new_fullbase"),
+	);
 	let _rpc_handlers = sc_service::spawn_tasks(sc_service::SpawnTasksParams {
 		config,
 		backend: backend.clone(),
@@ -647,18 +650,22 @@ mod tests {
 		let keystore_path = tempfile::tempdir().expect("Creates keystore path");
 		let keystore: SyncCryptoStorePtr =
 			Arc::new(LocalKeystore::open(keystore_path.path(), None).expect("Creates keystore"));
+		// 这是调用 Babe共识的 AuthorityId Alice
 		let alice: sp_consensus_babe::AuthorityId =
 			SyncCryptoStore::sr25519_generate_new(&*keystore, BABE, Some("//Alice"))
 				.expect("Creates authority pair")
 				.into();
-
+		// 获取chain_spec
 		let chain_spec = crate::chain_spec::tests::integration_test_config_with_single_authority();
 
+		// 创建一个测试用的插槽=1
 		// For the block factory
 		let mut slot = 1u64;
 
 		// For the extrinsics factory
+		// 创建bob的Arc夸线程计数指针
 		let bob = Arc::new(AccountKeyring::Bob.pair());
+		// 创建charlie的Arc夸线程计数指针
 		let charlie = Arc::new(AccountKeyring::Charlie.pair());
 		let mut index = 0;
 

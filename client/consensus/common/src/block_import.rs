@@ -323,13 +323,14 @@ pub trait BlockImport<B: BlockT> {
 	/// The transaction type used by the backend.
 	type Transaction: Send + 'static;
 
+	// 区块预检查
 	/// Check block preconditions.
 	async fn check_block(
 		&mut self,
 		block: BlockCheckParams<B>,
 	) -> Result<ImportResult, Self::Error>;
 
-	/// Import a block.
+	/// Import a block. 导入区块
 	///
 	/// Cached data can be accessed through the blockchain cache.
 	async fn import_block(

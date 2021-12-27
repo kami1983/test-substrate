@@ -723,6 +723,7 @@ pub mod pallet {
 				unlocking: vec![],
 				claimed_rewards: (last_reward_era..current_era).collect(),
 			};
+			// lock amount.
 			Self::update_ledger(&controller, &item);
 			Ok(())
 		}
@@ -914,6 +915,7 @@ pub mod pallet {
 
 			Self::do_remove_nominator(stash);
 			Self::do_add_validator(stash, prefs);
+
 			Ok(())
 		}
 
@@ -963,6 +965,7 @@ pub mod pallet {
 				.map(|n| {
 					n.and_then(|n| {
 						if old.contains(&n) || !Validators::<T>::get(&n).blocked {
+							// 如果之前存在这个用户提名，而且验证人灭有设定不允许提名那么返回这个验证人的ID
 							Ok(n)
 						} else {
 							Err(Error::<T>::BadTarget.into())

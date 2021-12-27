@@ -317,9 +317,11 @@ where
 		let mut block_builder =
 			self.client.new_block_at(&self.parent_id, inherent_digests, PR::ENABLED)?;
 
+		// 将交易 Extrinsic 放入 BlockBuilder 中
 		for inherent in block_builder.create_inherents(inherent_data)? {
 			match block_builder.push(inherent) {
 				Err(ApplyExtrinsicFailed(Validity(e))) if e.exhausted_resources() => {
+					// 添加失败因为超重
 					warn!("⚠️  Dropping non-mandatory inherent from overweight block.")
 				},
 				Err(ApplyExtrinsicFailed(Validity(e))) if e.was_mandatory() => {

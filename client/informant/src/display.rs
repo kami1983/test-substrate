@@ -122,6 +122,7 @@ impl<B: BlockT> InformantDisplay<B> {
 				("⚙️ ", format!("Syncing{}", speed), format!(", target=#{}", n)),
 		};
 
+		// 💤 Idle (0 peers), best: #0 (0x5ac2…3777), finalized #0 (0x5ac2…3777), ⬇ 0 ⬆ 0
 		if self.format.enable_color {
 			info!(
 				target: "substrate",
