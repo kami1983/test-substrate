@@ -714,7 +714,7 @@ impl<Block: BlockT> HeaderMetadata<Block> for BlockchainDb<Block> {
 	}
 
 	fn insert_header_metadata(&self, hash: Block::Hash, metadata: CachedHeaderMetadata<Block>) {
-		log::info!("{} 判断是否有共同祖先 hash ={:?}, metadata ={:?}, 这里是在写入 header_metadata 么？ ",
+		log::info!("{} 插入 Header metadata hash ={:?}, metadata ={:?}, 这里是在写入 header_metadata. ",
 				   ansi_term::Colour::Red.bold().paint("###### client/db/lib.rs - insert_header_metadata"),
 				   &hash,
 				   &metadata,
